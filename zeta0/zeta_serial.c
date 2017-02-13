@@ -1,19 +1,33 @@
 #include <stdio.h>
+#include <math.h>
+#include <stdlib.h>
 
-int main(int argc, char const *argv[])
+
+double zeta0(double n)
 {
-	double n = 10;
 	double S = 0;
-
-	printf("Enter n: \n");
-	scanf("%lf", &n);
-	printf("n = %d\n\n", n);
+	double pi = 0;
+	//printf("%lf\n", n);
 
 	double i = 0;
-	for (i=1;i<n;i++) {
+	for (i=1;i<=n;i++) {
 		S += 1/(i*i);
 	}
 
-	printf("S = %.12lf\n", S);
+	pi = sqrt(6*S);
+	return pi;
+}
+
+/*
+int main(int argc, char const *argv[])
+{
+	double n = 0;
+	n = atof(argv[1]);
+	double pi = 0;
+
+	pi = zeta0(n);
+	
+	printf("n = %.1lf, pi = %.14lf\n", n, pi);
 	return 0;
 }
+*/
