@@ -17,17 +17,3 @@ double zeta0(double n)
 	pi = sqrt(6*S);
 	return pi;
 }
-
-/*
-int main(int argc, char const *argv[])
-{
-	double n = 0;
-	n = atof(argv[1]);
-	double pi = 0;
-
-	pi = zeta0(n);
-	
-	printf("n = %.1lf, pi = %.14lf\n", n, pi);
-	return 0;
-}
-*/

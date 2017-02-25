@@ -17,13 +17,14 @@ int main(int argc, char const *argv[])
 
 	S = (double*)calloc(n, sizeof(double));
 	for (double i=1;i<=n;i++) {
-		S[(int) i] = 1/(i*i);
+		S[(int) i-1] = 1/(i*i);
 		//printf("%lf\n", S[(int) i]);
 	}
 
 	double sum = 0;
 	int i;
-	#pragma omp parallel for reduction (+:sum)
+	int num_proc = 8;
+	#pragma omp parallel for reduction(+:sum) num_threads(num_proc) 
 	  	for (i=0;i< (int) n;++i) {
 			sum += S[i];
 		}
@@ -31,8 +32,8 @@ int main(int argc, char const *argv[])
 	double pi = sqrt(6*sum);
 	printf("pi = %lf\n", pi);
 	clock_t diff = clock() - s_time;
-	double t_total = (double) (diff) / CLOCKS_PER_SEC;
-	printf("Absolute error: %.10lf, n = %.0lf, walltime: %.5lfs\n", fabs(PI-pi),n, t_total);
+	double t_total = (double) (diff) / 1000; 
+	printf("Absolute error: %.15lf, n = %.0lf, walltime: %.6lfs\n", fabs(PI-pi),n, t_total);
 
 	return 0;
 }

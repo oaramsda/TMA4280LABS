@@ -72,8 +72,8 @@ int main(int argc, char const *argv[])
 		double pi = sum;
 		printf("pi = %lf\n", pi);
 		clock_t diff = clock() - s_time;
-		double t_total = (double) (diff) / CLOCKS_PER_SEC;
-		printf("Absolute error: %.10lf, n = %.0lf, walltime: %.3lfs\n", fabs(PI-pi),n, t_total);
+		double t_total = (double) (diff) / 1000;
+		printf("Absolute error: %.15lf, n = %.0lf, walltime: %.3lfs\n", fabs(PI-pi),n, t_total);
 	}
 	
 	MPI_Finalize();

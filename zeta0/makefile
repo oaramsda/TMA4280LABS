@@ -1,7 +1,12 @@
+CC=gcc
+
+main:
+	$(CC) zeta_serial_main.c -o zeta_serial
+
 utest:
-	gcc unit_test_zeta.c -o ut_zeta
+	$(CC) unit_test_zeta.c -o ut_zeta
 	./ut_zeta
 
 vtest:
-	gcc ver_test_zeta.c -o vtest_zeta
+	$(CC) ver_test_zeta.c -o vtest_zeta
 	./vtest_zeta.exe

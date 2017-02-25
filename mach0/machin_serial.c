@@ -24,17 +24,3 @@ double machin0(double n)
 
 	return pi;
 }
-
-/*
-int main(int argc, char const *argv[])
-{
-	double n = 0;
-	n = atof(argv[1]);
-	double pi = 0;
-	pi = machin0(n);
-
-	printf("pi = %.14lf\n", pi);
-
-	return 0;
-}
-*/

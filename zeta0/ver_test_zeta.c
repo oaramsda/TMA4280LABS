@@ -17,7 +17,7 @@ int main(int argc, char const *argv[])
 
 		double resi = PI - pi_k;
 
-		fprintf(fp, "n = %.0lf,\t\t\tresidual = %.14lf, \t\t\tpi=%.14lf\n", pow(2,k), resi, pi_k);
+		fprintf(fp, "n = %.0lf,\t\t\tresidual = %.15lf, \t\t\tpi=%.15lf\n", pow(2,k), resi, pi_k);
 		
 
 	}
