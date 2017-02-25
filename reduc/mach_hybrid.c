@@ -3,6 +3,7 @@
 #include <math.h>
 #include <time.h>
 #include <mpi.h>
+#include <omp.h>
 
 #define PI 3.14159265358979323846
 
@@ -30,13 +31,10 @@ int main(int argc, char const *argv[])
 		return 0;
 	}
 
-	if (argc != 2) {
-		printf("Expected one argument\n");
-		MPI_Finalize();
-		return -1;
-	}
 	double n = atof(argv[1]);
+	//printf("%lf\n", n);
 	int k = ((int) n) / world_size;
+	//printf("%d\n", k);
 	double *S;
 	double *s;
 	double par_sum = 0;
@@ -44,13 +42,30 @@ int main(int argc, char const *argv[])
 
 	if (world_rank == 0) {
 		S = (double*)calloc(n, sizeof(double));
-		for (double i=1;i<=n;i++) {
-			S[(int) i] = 1/(i*i);
+		double a = (double) 1/5;
+		double b = (double) 1/239;
+		double S1 = 0;
+		double S2 = 0;
+		double sign = 0;
+		for (double i=0;i<=n;i++) {
+			sign = pow(-1,i);
+			S1 = sign*pow(a,2*i+1)/(2*i+1);
+			S2 = sign*pow(b,2*i+1)/(2*i+1);
+			S[(int) i] = 4*(4*S1 - S2);
+			//printf("%lf\n", S[(int) i]);
 		}
 	}
 	
 	MPI_Scatter(S, k, MPI_DOUBLE, s, k, MPI_DOUBLE, 0, MPI_COMM_WORLD);
+
+	int num_threads;
+	#pragma omp parallel
+        num_threads = omp_get_num_threads();
+        if (world_rank == 0){
+            printf("Number of threads used by OpenMP: %d\n", num_threads);
+        }
 	
+	#pragma omp parallel for reduction(+:par_sum)
 	for (int i=0;i<k;++i){
 		par_sum += s[i];
 	}
@@ -61,16 +76,16 @@ int main(int argc, char const *argv[])
 	}
 
 	double sum = 0;
-	MPI_Allreduce(&par_sum, &sum, 1, MPI_DOUBLE, MPI_SUM, MPI_COMM_WORLD);
-	double pi = sqrt(6*sum);
-	printf("pi = %lf\n", pi);
-	clock_t diff = clock() - s_time;
-	double t_total = (double) (diff) / 1000;
-	printf("Absolute error: %.15lf, n = %.0lf, walltime: %.3lfs, process: %d\n", fabs(PI-pi),n, t_total, world_rank);
-
+	MPI_Reduce(&par_sum, &sum, 1, MPI_DOUBLE, MPI_SUM, 0, MPI_COMM_WORLD);
+	if (world_rank == 0) {
+		double pi = sum;
+		printf("pi = %lf\n", pi);
+		clock_t diff = clock() - s_time;
+		double t_total = (double) (diff) / 1000;
+		printf("Absolute error: %.15lf, n = %.0lf, walltime: %.3lfs\n", fabs(PI-pi),n, t_total);
+	}
 	
 	MPI_Finalize();
-
 
 	return 0;
 }
