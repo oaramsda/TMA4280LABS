@@ -18,10 +18,7 @@ int main(int argc, char const *argv[])
 	int world_rank;
 	MPI_Comm_rank(MPI_COMM_WORLD, &world_rank);
 
-	
-	//printf("%lf\n", world_size % 2);
 	double l = log(world_size)/log(2);
-
 	if (floor(l) != l) {
 		if (world_rank == 0) {
 			printf("Number of processes is not a power of 2. Aborting\n");
@@ -31,9 +28,8 @@ int main(int argc, char const *argv[])
 	}
 
 	double n = atof(argv[1]);
-	//printf("%lf\n", n);
 	int k = ((int) n) / world_size;
-	//printf("%d\n", k);
+
 	double *S;
 	double *s;
 	double par_sum = 0;
@@ -42,7 +38,7 @@ int main(int argc, char const *argv[])
 	if (world_rank == 0) {
 		S = (double*)calloc(n, sizeof(double));
 		for (double i=1;i<=n;i++) {
-			S[(int) i] = 1/(i*i);
+			S[(int) i - 1] = 1/(i*i);
 			//printf("%lf\n", S[(int) i]);
 		}
 	}
@@ -55,6 +51,7 @@ int main(int argc, char const *argv[])
 	if (world_rank == 0) {
 		for (int i=k*world_size;i<n;++i){
 			par_sum += S[i];
+			//printf("%lf\n", S[i]);
 		}
 	}
 
@@ -65,13 +62,11 @@ int main(int argc, char const *argv[])
 		printf("pi = %lf\n", pi);
 		clock_t diff = clock() - s_time;
 		double t_total = (double) (diff) / CLOCKS_PER_SEC;
-		printf("Absolute error: %.10lf, n = %.0lf, walltime: %.3lfs\n", fabs(PI-pi),n, t_total);
+		printf("Absolute error: %.14lf, n = %.0lf, walltime: %.3lfs\n", fabs(PI-pi),n, t_total);
 	}
-	
 	
 
 	MPI_Finalize();
-
 
 	return 0;
 }

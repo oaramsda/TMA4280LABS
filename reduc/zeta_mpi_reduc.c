@@ -68,8 +68,6 @@ int main(int argc, char const *argv[])
 		printf("Absolute error: %.10lf, n = %.0lf, walltime: %.3lfs\n", fabs(PI-pi),n, t_total);
 	}
 	
-	
-
 	MPI_Finalize();
 
 
