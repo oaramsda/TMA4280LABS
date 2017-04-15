@@ -12,6 +12,9 @@
 #include <stdlib.h>
 #include <stdio.h>
 #include <math.h>
+#include <time.h>
+
+
 
 #define PI 3.14159265358979323846
 #define true 1
@@ -26,6 +29,7 @@ real **mk_2D_array(size_t n1, size_t n2, bool zero);
 void transpose(real **bt, real **b, size_t m);
 real rhs(real x, real y);
 void print_matrix(double **b, int m, int n);
+real analyt_sol(real x, real y);
 
 // Functions implemented in FORTRAN in fst.f and called from C.
 // The trailing underscore comes from a convention for symbol names, called name
@@ -41,6 +45,10 @@ int main(int argc, char **argv)
         printf("Arguments:\n");
         printf("  n: the problem size (must be a power of 2)\n");
     }
+
+    clock_t s_time;
+    double e_time;
+    s_time = clock();
 
     /*
      *  The equation is solved on a 2D structured grid and homogeneous Dirichlet
@@ -80,6 +88,8 @@ int main(int argc, char **argv)
     real **b = mk_2D_array(m, m, false);
     real **bt = mk_2D_array(m, m, false);
 
+    real **a_sol = mk_2D_array(m,n, false);
+
     /*
      * This vector will holds coefficients of the Discrete Sine Transform (DST)
      * but also of the Fast Fourier Transform used in the FORTRAN code.
@@ -105,6 +115,7 @@ int main(int argc, char **argv)
     for (size_t i = 0; i < m; i++) {
         for (size_t j = 0; j < m; j++) {
             b[i][j] = h * h * rhs(grid[i+1], grid[j+1]);
+            a_sol[i][j] = analyt_sol(grid[i+1], grid[j+1]);
         }
     }
 
@@ -147,8 +158,8 @@ int main(int argc, char **argv)
         }
     }
 
-    //printf("\n");
-    //print_matrix(bt, m, m);
+    printf("\n");
+    print_matrix(bt, m, m);
 
     /*
      * Compute U = S^-1 * (S * Utilde^T) (Chapter 9. page 101 step 3)
@@ -156,10 +167,21 @@ int main(int argc, char **argv)
     for (size_t i = 0; i < m; i++) {
         fst_(bt[i], &n, z, &nn);
     }
+
+    printf("\n");
+    print_matrix(bt, m, m);
+
     transpose(b, bt, m);
+
+    printf("\n");
+    print_matrix(b, m, m);
+
     for (size_t i = 0; i < m; i++) {
         fstinv_(b[i], &n, z, &nn);
     }
+
+    printf("\n");
+    print_matrix(b, m, m);
 
     /*
      * Compute maximal value of solution for convergence analysis in L_\infty
@@ -169,13 +191,20 @@ int main(int argc, char **argv)
     //print_matrix(b, m, m);
 
     double u_max = 0.0;
+    double err_max = 0.0;
+    double err = 0.0;
     for (size_t i = 0; i < m; i++) {
         for (size_t j = 0; j < m; j++) {
             u_max = u_max > b[i][j] ? u_max : b[i][j];
+            err = fabs(b[i][j] - a_sol[i][j]);
+            err_max = err_max >  err ? err_max : err;
         }
     }
 
     printf("u_max = %e\n", u_max);
+    e_time = (clock() - e_time) / CLOCKS_PER_SEC;
+    printf("Time elapsed: %lf\n", e_time);
+    printf("Max absolute error: %f\n", err_max);
 
     return 0;
 }
@@ -187,7 +216,12 @@ int main(int argc, char **argv)
 
 real rhs(real x, real y) {
     return 2 * (y - y*y + x - x*x);
+    //return 5*PI*PI*sin(PI*x)*sin(2*PI*y);
     //return 1;
+}
+
+real analyt_sol(real x, real y) {
+  return sin(PI*x)*sin(2*PI*y);
 }
 
 /*
