@@ -57,7 +57,7 @@ int main(int argc, char **argv)
     MPI_Comm_rank(MPI_COMM_WORLD, &world_rank);
     //printf("World size: %i\n", world_size);
 
-    //Start timing of process 0
+    //Start timing on process 0
     real e_time;
     if (world_rank == 0) {
       e_time = MPI_Wtime();
@@ -70,6 +70,10 @@ int main(int argc, char **argv)
      *  - the number of grid points in each direction is n+1,
      *  - the number of degrees of freedom in each direction is m = n-1,
      *  - the mesh size is constant h = 1/n.
+     *
+     * - Number of processors must be a power of two. This allows equal amounts
+     *   of data to be handled on each processors making the parallel transpose
+     *   simpler. An implementation without this constraint is also be possible.
      */
     int n = atoi(argv[1]);
     int m = n/world_size;
@@ -127,10 +131,13 @@ int main(int argc, char **argv)
     //real *z = mk_1D_array(nn, false);
 
 
+    /*
+    * Z is made two-dimensional so that different threads can use it without
+    * overwriting eachothers data. omp_get_thread_num() is used to designate
+    * free rows.
+    */
     real **z = mk_2D_array(t,nn,false);
 
-    //#pragma omp parallel
-    //{
 
    real *diag = mk_1D_array(n, false);
 
@@ -228,12 +235,13 @@ int main(int argc, char **argv)
 
 
       /*
-       * Compute maximal value of solution for convergence analysis in L_\infty
-       * norm.
+       * Compute maximal value and maximal absolute error of solution for
+       * convergence analysis.
        */
 
       real err = 0.0;
 
+      //Last value is not considered since it is on the boundary
 
       #pragma omp for collapse(2)
         for (size_t i = 0; i < m; i++) {
