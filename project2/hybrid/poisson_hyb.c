@@ -75,7 +75,7 @@ int main(int argc, char **argv)
     int m = n/world_size;
     real h = 1.0 / n;
 
-    if (world_rank == 0) printf("n =  %i, m = %i\n", n, m);
+    if (world_rank == 0) printf("Grid size: n = %i, World size = %i, Rows per process: m = %i, Set number of threads: t = %i\n", n, world_size, m, t);
 
     //Check if world_size is a power of 2
   	if (!is_pow2(world_size)) {
@@ -101,126 +101,164 @@ int main(int argc, char **argv)
     real **a_sol = mk_2D_array(m,n, false);
 
     int nn = 4 * n;
-    real *z = mk_1D_array(nn, false);
+
+
+    int iam = 0, np = 1;
+    int namelen;
+    char processor_name[MPI_MAX_PROCESSOR_NAME];
+    MPI_Get_processor_name(processor_name, &namelen);
+
+    /*#pragma omp parallel default(shared) private(iam, np)
+    {
+      np = omp_get_num_threads();
+      iam = omp_get_thread_num();
+      printf("Hello from thread %d out of %d from process %d out of %d on %s\n", iam, np, world_rank, world_size, processor_name);
+    }*/
 
     /*
      * Grid points are generated with constant mesh size on both x- and y-axis.
      */
+
+    real u_max = 0.0, err_max = 0.0;
+
     real *x_grid = mk_1D_array(m, false);
     real *y_grid = mk_1D_array(n, false);
 
-    #pragma omp parallel for
-    for (size_t i = 0; i < m; i++) {
-        x_grid[i] = (i + 1 + m*world_rank) * h ;
-        //if (world_rank == 0) printf("Number of threads in parallel: %i\n", omp_get_num_threads());
-    }
+    //real *z = mk_1D_array(nn, false);
 
-    #pragma omp parallel for
-    for (size_t i = 0; i < n+1; i++) {
-        y_grid[i] = (i+1) * h ;
-    }
 
-    real *diag = mk_1D_array(n, false);
-    #pragma omp parallel for
-    for (size_t i = 0; i < n; i++) {
-        diag[i] = 2.0 * (1.0 - cos((i+1) * PI / n));
-    }
+    real **z = mk_2D_array(t,nn,false);
 
-    //int debug_rank = 0;
+    //#pragma omp parallel
+    //{
 
-    #pragma omp parallel for collapse(2)
-    for (size_t i = 0; i < m; i++) {
-        for (size_t j = 0; j < n; j++) {
-            b[i][j] = h * h * rhs(x_grid[i], y_grid[j]);
-            a_sol[i][j] = analyt_sol(x_grid[i], y_grid[j]);
-            //b[i][j] = rhs(x_grid[i+1], y_grid[j+1]); for easier testing
+   real *diag = mk_1D_array(n, false);
+
+    #pragma omp parallel
+    {
+
+      #pragma omp for
+      for (size_t i = 0; i < m; i++) {
+          x_grid[i] = (i + 1 + m*world_rank) * h ;
+          //if (world_rank == 0) printf("Number of threads in parallel: %i\n", omp_get_num_threads());
+      }
+
+      #pragma omp for
+      for (size_t i = 0; i < n+1; i++) {
+          y_grid[i] = (i+1) * h ;
+      }
+
+      #pragma omp for
+      for (size_t i = 0; i < n; i++) {
+          diag[i] = 2.0 * (1.0 - cos((i+1) * PI / n));
+
+      }
+
+      //int debug_rank = 0;
+
+      #pragma omp for collapse(2)
+      for (size_t i = 0; i < m; i++) {
+          for (size_t j = 0; j < n; j++) {
+              a_sol[i][j] = analyt_sol(x_grid[i], y_grid[j]);
+              b[i][j] = h * h * rhs(x_grid[i], y_grid[j]);
+              //b[i][j] = rhs(x_grid[i+1], y_grid[j+1]); for easier testing
+          }
         }
-    }
-
-    /*
-     * Compute \tilde G^T = S^-1 * (S * G)^T (Chapter 9. page 101 step 1)
-     * Instead of using two matrix-matrix products the Discrete Sine Transform
-     * (DST) is used.
-     * The DST code is implemented in FORTRAN in fsf.f and can be called from C.
-     * The array zz is used as storage for DST coefficients and internally for
-     * FFT coefficients in fst_ and fstinv_.
-     * In functions fst_ and fst_inv_ coefficients are written back to the input
-     * array (first argument) so that the initial values are overwritten.
-     */
-
-    #pragma omp for
-    for (size_t i = 0; i < m; i++) {
-        fst_(b[i], &n, z, &nn);
-    }
-
-    parallel_transpose(bt, b, send, recv, world_size, m, n, world_rank);
-
-    #pragma omp for
-    for (size_t i = 0; i < m; i++) {
-        fstinv_(bt[i], &n, z, &nn);
-    }
 
 
-    /*
-     * Solve Lambda * \tilde U = \tilde G (Chapter 9. page 101 step 2)
-     */
 
-    #pragma omp parallel for collapse(2)
-    for (size_t i = 0; i < m; i++) {
-        for (size_t j = 0; j < n; j++) {
-            bt[i][j] = bt[i][j] / (diag[i+world_rank*m] + diag[j]);
-        }
-    }
+      /*
+       * Compute \tilde G^T = S^-1 * (S * G)^T (Chapter 9. page 101 step 1)
+       * Instead of using two matrix-matrix products the Discrete Sine Transform
+       * (DST) is used.
+       * The DST code is implemented in FORTRAN in fsf.f and can be called from C.
+       * The array zz is used as storage for DST coefficients and internally for
+       * FFT coefficients in fst_ and fstinv_.
+       * In functions fst_ and fst_inv_ coefficients are written back to the input
+       * array (first argument) so that the initial values are overwritten.
+       */
 
-    /*
-     * Compute U = S^-1 * (S * Utilde^T) (Chapter 9. page 101 step 3)
-     */
-
-    #pragma omp for
-    for (size_t i = 0; i < m; i++) {
-        fst_(bt[i], &n, z, &nn);
-    }
-
-    parallel_transpose(b, bt, send, recv, world_size, m, n, world_rank);
+      #pragma omp for
+      for (size_t i = 0; i < m; i++) {
+          fst_(b[i], &n, z[omp_get_thread_num()], &nn);
+      }
 
 
-    #pragma omp for
-    for (size_t i = 0; i < m; i++) {
-        fstinv_(b[i], &n, z, &nn);
-    }
+      #pragma omp master
+      parallel_transpose(bt, b, send, recv, world_size, m, n, world_rank);
+      #pragma omp barrier
 
-    /*
-     * Compute maximal value of solution for convergence analysis in L_\infty
-     * norm.
-     */
+      #pragma omp for
+      for (size_t i = 0; i < m; i++) {
+          fstinv_(bt[i], &n, z[omp_get_thread_num()], &nn);
+      }
 
-      //if(world_rank != world_size-1) {
-        real u_max = 0.0;
-        real err = 0.0;
-        real err_max = 0.0;
-        //size_t o = world_rank == 0 ? 1 : 0;
-        #pragma omp parallel for collapse(2)
+      /*
+       * Solve Lambda * \tilde U = \tilde G (Chapter 9. page 101 step 2)
+       */
+
+      #pragma omp for collapse(2)
+      for (size_t i = 0; i < m; i++) {
+          for (size_t j = 0; j < n; j++) {
+              bt[i][j] = bt[i][j] / (diag[i+world_rank*m] + diag[j]);
+          }
+      }
+
+
+      /*
+       * Compute U = S^-1 * (S * Utilde^T) (Chapter 9. page 101 step 3)
+       */
+
+      #pragma omp for
+      for (size_t i = 0; i < m; i++) {
+          fst_(bt[i], &n, z[omp_get_thread_num()], &nn);
+      }
+
+
+      #pragma omp master
+      parallel_transpose(b, bt, send, recv, world_size, m, n, world_rank);
+      #pragma omp barrier
+
+
+      #pragma omp for
+      for (size_t i = 0; i < m; i++) {
+          fstinv_(b[i], &n, z[omp_get_thread_num()], &nn);
+          //if (world_rank == 0) printf("i = %i, t = %i\n", (int)i, omp_get_thread_num());
+      }
+
+
+      /*
+       * Compute maximal value of solution for convergence analysis in L_\infty
+       * norm.
+       */
+
+      real err = 0.0;
+
+
+      #pragma omp for collapse(2)
         for (size_t i = 0; i < m; i++) {
-            for (size_t j = 0; j < n-1; j++) {
-                err = fabs(b[i][j] - a_sol[i][j]);
-                //printf("%f\n", err);
-                err_max = err_max > err ? err_max : err;
-                u_max = u_max > b[i][j] ? u_max : b[i][j];
+          for (size_t j = 0; j < n-1; j++) {
+            //if (world_rank == 0) printf("i = %i, j = %i, t = %i\n", (int)i, (int)j, omp_get_thread_num());
+
+              err = fabs(b[i][j] - a_sol[i][j]);
+              err_max = err_max > err ? err_max : err;
+              u_max = u_max > b[i][j] ? u_max : b[i][j];
+
             }
         }
+    }
 
-        //printf("u_max = %e\n", u_max);
+    real u_max_glob = 0, err_max_glob = 0;
+    //printf("%f\n", u_max_glob);
+    MPI_Reduce(&u_max, &u_max_glob, 1, MPI_DOUBLE, MPI_MAX, 0, MPI_COMM_WORLD);
+    MPI_Reduce(&err_max, &err_max_glob, 1, MPI_DOUBLE, MPI_MAX, 0, MPI_COMM_WORLD);
 
-        real u_max_glob, err_max_glob;
-        MPI_Reduce(&u_max, &u_max_glob, 1, MPI_DOUBLE, MPI_MAX, 0, MPI_COMM_WORLD);
-        MPI_Reduce(&err_max, &err_max_glob, 1, MPI_DOUBLE, MPI_MAX, 0, MPI_COMM_WORLD);
-
-        if (world_rank == 0) {
-          e_time = MPI_Wtime() - e_time ;
-          printf("u_max = %e\n", u_max_glob);
-          printf("Time elapsed: %f\n", e_time);
-          printf("Max absolute error: %.8f\n", err_max_glob);
-        }
+    if (world_rank == 0) {
+      e_time = MPI_Wtime() - e_time ;
+      printf("u_max = %e\n", u_max_glob);
+      printf("Time elapsed: %f\n", e_time);
+      printf("Max absolute error: %.8f\n\n", err_max_glob);
+    }
     //}
 
     MPI_Finalize();
@@ -236,6 +274,7 @@ int main(int argc, char **argv)
 real rhs(real x, real y) {
     //return 2 * (y - y*y + x - x*x);
     return 5*PI*PI*sin(PI*x)*sin(2*PI*y); // RHS of known solution
+    //return exp(x)*sin(2*PI*x)*sin(2*PI*y);
     //return x;
     //return 1;
 }
@@ -317,17 +356,17 @@ void print_matrix(real **b, int m, int n) {
 
 void parallel_transpose(real **bt, real **b, real *send, real *recv, int world_size, int m, int n, int world_rank) {
   size_t i, j;
-  #pragma omp parallel for collapse(2)
+  //#pragma omp parallel for collapse(2)
   for (i=0; i<(size_t)m; i++) {
     for (j=0; j<(size_t)n; j++) {
       send[m*i + (j/m)*(m*m) + j%m] = b[i][j];
+      //if (world_rank == 0) printf("i = %i, j = %i, t = %i\n", (int)i, (int)j, omp_get_thread_num());
     }
   }
 
   MPI_Alltoall(&send[0], m*m, MPI_DOUBLE, &recv[0], m*m, MPI_DOUBLE, MPI_COMM_WORLD);
 
   int cnt = 0;
-  #pragma omp for collapse(2)
   for (j=0; j<(size_t)n; j++) {
     for (i=0; i<(size_t)m; i++) {
       bt[i][j] = recv[cnt];
