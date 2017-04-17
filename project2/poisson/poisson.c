@@ -158,8 +158,8 @@ int main(int argc, char **argv)
         }
     }
 
-    printf("\n");
-    print_matrix(bt, m, m);
+    //printf("\n");
+    //print_matrix(bt, m, m);
 
     /*
      * Compute U = S^-1 * (S * Utilde^T) (Chapter 9. page 101 step 3)
@@ -168,20 +168,20 @@ int main(int argc, char **argv)
         fst_(bt[i], &n, z, &nn);
     }
 
-    printf("\n");
-    print_matrix(bt, m, m);
+    //printf("\n");
+    //print_matrix(bt, m, m);
 
     transpose(b, bt, m);
 
-    printf("\n");
-    print_matrix(b, m, m);
+    //printf("\n");
+    //print_matrix(b, m, m);
 
     for (size_t i = 0; i < m; i++) {
         fstinv_(b[i], &n, z, &nn);
     }
 
-    printf("\n");
-    print_matrix(b, m, m);
+    //printf("\n");
+    //print_matrix(b, m, m);
 
     /*
      * Compute maximal value of solution for convergence analysis in L_\infty
@@ -204,7 +204,7 @@ int main(int argc, char **argv)
     printf("u_max = %e\n", u_max);
     e_time = (clock() - e_time) / CLOCKS_PER_SEC;
     printf("Time elapsed: %lf\n", e_time);
-    printf("Max absolute error: %f\n", err_max);
+    printf("Max absolute error: %.8f\n", err_max);
 
     return 0;
 }
@@ -215,8 +215,8 @@ int main(int argc, char **argv)
  */
 
 real rhs(real x, real y) {
-    return 2 * (y - y*y + x - x*x);
-    //return 5*PI*PI*sin(PI*x)*sin(2*PI*y);
+    //return 2 * (y - y*y + x - x*x);
+    return 5*PI*PI*sin(PI*x)*sin(2*PI*y);
     //return 1;
 }
 

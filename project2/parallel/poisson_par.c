@@ -1,7 +1,8 @@
 /**
  * C program to solve the two-dimensional Poisson equation on
  * a unit square using one-dimensional eigenvalue decompositions
- * and fast sine transforms.
+ * and fast sine transforms in parallel. This program is based on the given
+ * serial program by:
  *
  * Einar M. Rønquist
  * NTNU, October 2000
@@ -62,8 +63,6 @@ int main(int argc, char **argv)
       e_time = MPI_Wtime();
     }
 
-    //printf("w_size: %i\n", world_size);
-
 
     /*
      *  The equation is solved on a 2D structured grid and homogeneous Dirichlet
@@ -75,6 +74,8 @@ int main(int argc, char **argv)
     int n = atoi(argv[1]);
     int m = n/world_size;
     real h = 1.0 / n;
+
+    if (world_rank == 0) printf("n =  %i, m = %i\n", n, m);
 
     //Check if world_size is a power of 2
   	if (!is_pow2(world_size)) {
@@ -106,54 +107,35 @@ int main(int argc, char **argv)
      * Grid points are generated with constant mesh size on both x- and y-axis.
      */
     real *x_grid = mk_1D_array(m, false);
-    real *y_grid = mk_1D_array(n+1, false);
+    real *y_grid = mk_1D_array(n, false);
 
     #pragma omp parallel for
     for (size_t i = 0; i < m; i++) {
-        x_grid[i] = (i + m*world_rank) * h ;
+        x_grid[i] = (i + 1 + m*world_rank) * h ;
+        //if (world_rank == 0) printf("Number of threads in parallel: %i\n", omp_get_num_threads());
     }
-
-    /*if (world_rank == 3) {
-      for (int i=0; i<m;i++) {
-        printf("%lf\n", x_grid[i]);
-      }
-    }*/
 
     #pragma omp parallel for
     for (size_t i = 0; i < n+1; i++) {
-        y_grid[i] = i * h ;
+        y_grid[i] = (i+1) * h ;
     }
-
-    /*if (world_rank == 0) {
-      for (int i=0; i<n+1;i++) {
-        printf("%lf\n", y_grid[i]);
-      }
-    }*/
 
     real *diag = mk_1D_array(n, false);
     #pragma omp parallel for
     for (size_t i = 0; i < n; i++) {
         diag[i] = 2.0 * (1.0 - cos((i+1) * PI / n));
     }
-    int debug_rank = 0;
 
-    //if (world_rank == debug_rank) printf("diag: %lf %lf %lf %lf \n", diag[0], diag[1], diag[2], diag[3]);
-
+    //int debug_rank = 0;
 
     #pragma omp parallel for collapse(2)
     for (size_t i = 0; i < m; i++) {
         for (size_t j = 0; j < n; j++) {
-            b[i][j] = h * h * rhs(x_grid[i+1], y_grid[j+1]);
-            a_sol[i][j] = analyt_sol(x_grid[i+1], y_grid[j+1]);
+            b[i][j] = h * h * rhs(x_grid[i], y_grid[j]);
+            a_sol[i][j] = analyt_sol(x_grid[i], y_grid[j]);
             //b[i][j] = rhs(x_grid[i+1], y_grid[j+1]); for easier testing
         }
     }
-
-    /*if (world_rank == 0) {
-      //printf("%i\n", world_rank);
-      print_matrix(b, m, n);
-    }*/
-
 
     /*
      * Compute \tilde G^T = S^-1 * (S * G)^T (Chapter 9. page 101 step 1)
@@ -166,35 +148,17 @@ int main(int argc, char **argv)
      * array (first argument) so that the initial values are overwritten.
      */
 
-
-
     #pragma omp for
     for (size_t i = 0; i < m; i++) {
         fst_(b[i], &n, z, &nn);
     }
 
-    /*if (world_rank == debug_rank) {
-      //printf("%i\n", world_rank);
-      print_matrix(b, m, n-1);
-    }*/
-
     parallel_transpose(bt, b, send, recv, world_size, m, n, world_rank);
-
-    /*if (world_rank == debug_rank) {
-      printf("\n");
-      print_matrix(bt, m, n-1);
-    }*/
-
 
     #pragma omp for
     for (size_t i = 0; i < m; i++) {
         fstinv_(bt[i], &n, z, &nn);
     }
-
-    /*if (world_rank == debug_rank) {
-      printf("\n");
-      print_matrix(bt, m, n-1);
-    }*/
 
 
     /*
@@ -208,11 +172,6 @@ int main(int argc, char **argv)
         }
     }
 
-    if (world_rank == debug_rank) {
-      printf("\n");
-      print_matrix(bt, m, n-1);
-    }
-
     /*
      * Compute U = S^-1 * (S * Utilde^T) (Chapter 9. page 101 step 3)
      */
@@ -222,30 +181,12 @@ int main(int argc, char **argv)
         fst_(bt[i], &n, z, &nn);
     }
 
-    if (world_rank == debug_rank) {
-      printf("\n");
-      print_matrix(bt, m, n-1);
-    }
-
     parallel_transpose(b, bt, send, recv, world_size, m, n, world_rank);
-    //transpose(b, bt, m);
-
-    if (world_rank == debug_rank) {
-      printf("\n");
-      print_matrix(b, m, n-1);
-    }
 
 
     #pragma omp for
     for (size_t i = 0; i < m; i++) {
         fstinv_(b[i], &n, z, &nn);
-    }
-
-    if (world_rank == debug_rank) {
-      printf("\n");
-      print_matrix(b, m, n-1);
-      printf("\n");
-      //print_matrix(a_sol, m, n-1);
     }
 
     /*
@@ -278,7 +219,7 @@ int main(int argc, char **argv)
           e_time = MPI_Wtime() - e_time ;
           printf("u_max = %e\n", u_max_glob);
           printf("Time elapsed: %f\n", e_time);
-          printf("Max absolute error: %f\n", err_max_glob);
+          printf("Max absolute error: %.8f\n", err_max_glob);
         }
     //}
 
@@ -293,10 +234,10 @@ int main(int argc, char **argv)
  */
 
 real rhs(real x, real y) {
-    return 2 * (y - y*y + x - x*x);
-    //return 5*PI*PI*sin(PI*x)*sin(2*PI*y); // RHS of known solution
+    //return 2 * (y - y*y + x - x*x);
+    return 5*PI*PI*sin(PI*x)*sin(2*PI*y); // RHS of known solution
     //return x;
-    return 1;
+    //return 1;
 }
 
 /*
@@ -380,16 +321,9 @@ void parallel_transpose(real **bt, real **b, real *send, real *recv, int world_s
   for (i=0; i<(size_t)m; i++) {
     for (j=0; j<(size_t)n; j++) {
       send[m*i + (j/m)*(m*m) + j%m] = b[i][j];
-      /*if (world_rank == 1) {
-        printf("%i\n", (int)(world_size*i + j/world_size*(world_size*world_size) + j%world_size));
-      }*/
     }
   }
 
-  //printf("Send, %i: %lf, %lf, %lf, %lf, %lf, %lf, %lf, %lf, %lf, %lf, %lf, %lf, %lf, %lf, %lf, %lf\n", world_rank, send[0], send[1], send[2], send[3], send[4], send[5], send[6], send[7], send[8], send[9], send[10], send[11], send[12], send[13], send[14], send[15]);
-
-  //MPI_Alltoall(&send, m*m, MPI_DOUBLE, &recv, m*m, MPI_DOUBLE, MPI_COMM_WORLD);
-  //MPI_Barrier(MPI_COMM_WORLD);
   MPI_Alltoall(&send[0], m*m, MPI_DOUBLE, &recv[0], m*m, MPI_DOUBLE, MPI_COMM_WORLD);
 
   //printf("Recv, %i: %lf, %lf, %lf, %lf, %lf, %lf, %lf, %lf, %lf, %lf, %lf, %lf, %lf, %lf, %lf, %lf\n", world_rank, recv[0], recv[1], recv[2], recv[3], recv[4], recv[5], recv[6], recv[7], recv[8], recv[9], recv[10], recv[11], recv[12], recv[13], recv[14], recv[15]);
@@ -402,12 +336,6 @@ void parallel_transpose(real **bt, real **b, real *send, real *recv, int world_s
       cnt++;
     }
   }
-
-  /*if (world_rank == 0) {
-    print_matrix(bt, m, n);
-  }*/
-
-
 }
 
 int is_pow2(int n) {
