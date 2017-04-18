@@ -55,7 +55,6 @@ int main(int argc, char **argv)
     MPI_Init(&argc, &argv);
     MPI_Comm_size(MPI_COMM_WORLD, &world_size);
     MPI_Comm_rank(MPI_COMM_WORLD, &world_rank);
-    //printf("World size: %i\n", world_size);
 
     //Start timing on process 0
     real e_time;
@@ -106,19 +105,6 @@ int main(int argc, char **argv)
 
     int nn = 4 * n;
 
-
-    int iam = 0, np = 1;
-    int namelen;
-    char processor_name[MPI_MAX_PROCESSOR_NAME];
-    MPI_Get_processor_name(processor_name, &namelen);
-
-    /*#pragma omp parallel default(shared) private(iam, np)
-    {
-      np = omp_get_num_threads();
-      iam = omp_get_thread_num();
-      printf("Hello from thread %d out of %d from process %d out of %d on %s\n", iam, np, world_rank, world_size, processor_name);
-    }*/
-
     /*
      * Grid points are generated with constant mesh size on both x- and y-axis.
      */
@@ -127,8 +113,6 @@ int main(int argc, char **argv)
 
     real *x_grid = mk_1D_array(m, false);
     real *y_grid = mk_1D_array(n, false);
-
-    //real *z = mk_1D_array(nn, false);
 
 
     /*
@@ -147,7 +131,6 @@ int main(int argc, char **argv)
       #pragma omp for
       for (size_t i = 0; i < m; i++) {
           x_grid[i] = (i + 1 + m*world_rank) * h ;
-          //if (world_rank == 0) printf("Number of threads in parallel: %i\n", omp_get_num_threads());
       }
 
       #pragma omp for
@@ -161,18 +144,13 @@ int main(int argc, char **argv)
 
       }
 
-      //int debug_rank = 0;
-
       #pragma omp for collapse(2)
       for (size_t i = 0; i < m; i++) {
           for (size_t j = 0; j < n; j++) {
               a_sol[i][j] = analyt_sol(x_grid[i], y_grid[j]);
               b[i][j] = h * h * rhs(x_grid[i], y_grid[j]);
-              //b[i][j] = rhs(x_grid[i+1], y_grid[j+1]); for easier testing
           }
         }
-
-
 
       /*
        * Compute \tilde G^T = S^-1 * (S * G)^T (Chapter 9. page 101 step 1)
@@ -211,7 +189,6 @@ int main(int argc, char **argv)
           }
       }
 
-
       /*
        * Compute U = S^-1 * (S * Utilde^T) (Chapter 9. page 101 step 3)
        */
@@ -233,7 +210,6 @@ int main(int argc, char **argv)
           //if (world_rank == 0) printf("i = %i, t = %i\n", (int)i, omp_get_thread_num());
       }
 
-
       /*
        * Compute maximal value and maximal absolute error of solution for
        * convergence analysis.
@@ -246,18 +222,14 @@ int main(int argc, char **argv)
       #pragma omp for collapse(2)
         for (size_t i = 0; i < m; i++) {
           for (size_t j = 0; j < n-1; j++) {
-            //if (world_rank == 0) printf("i = %i, j = %i, t = %i\n", (int)i, (int)j, omp_get_thread_num());
-
               err = fabs(b[i][j] - a_sol[i][j]);
               err_max = err_max > err ? err_max : err;
               u_max = u_max > b[i][j] ? u_max : b[i][j];
-
             }
         }
     }
 
     real u_max_glob = 0, err_max_glob = 0;
-    //printf("%f\n", u_max_glob);
     MPI_Reduce(&u_max, &u_max_glob, 1, MPI_DOUBLE, MPI_MAX, 0, MPI_COMM_WORLD);
     MPI_Reduce(&err_max, &err_max_glob, 1, MPI_DOUBLE, MPI_MAX, 0, MPI_COMM_WORLD);
 
@@ -267,7 +239,8 @@ int main(int argc, char **argv)
       printf("Time elapsed: %f\n", e_time);
       printf("Max absolute error: %.8f\n\n", err_max_glob);
     }
-    //}
+
+    if (world_rank == 3) print_matrix(b, m, n-1);
 
     MPI_Finalize();
     return 0;
@@ -283,7 +256,6 @@ real rhs(real x, real y) {
     //return 2 * (y - y*y + x - x*x);
     return 5*PI*PI*sin(PI*x)*sin(2*PI*y); // RHS of known solution
     //return exp(x)*sin(2*PI*x)*sin(2*PI*y);
-    //return x;
     //return 1;
 }
 
@@ -294,7 +266,7 @@ real analyt_sol(real x, real y) {
   return sin(PI*x)*sin(2*PI*y);
 }
 
-
+/* Serial transpose
 void transpose(real **bt, real **b, size_t m)
 {
     for (size_t i = 0; i < m; i++) {
@@ -303,6 +275,7 @@ void transpose(real **bt, real **b, size_t m)
         }
     }
 }
+*/
 
 /*
  * The allocation of a vectore of size n is done with just allocating an array.
@@ -368,7 +341,6 @@ void parallel_transpose(real **bt, real **b, real *send, real *recv, int world_s
   for (i=0; i<(size_t)m; i++) {
     for (j=0; j<(size_t)n; j++) {
       send[m*i + (j/m)*(m*m) + j%m] = b[i][j];
-      //if (world_rank == 0) printf("i = %i, j = %i, t = %i\n", (int)i, (int)j, omp_get_thread_num());
     }
   }
 

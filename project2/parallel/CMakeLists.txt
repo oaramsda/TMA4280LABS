@@ -38,7 +38,7 @@ include_directories(${INCLUDES})
 add_library(common fst.f)
 
 # The C based poisson application
-add_executable(poisson poisson_par.c)
+add_executable(poisson poisson_mpi.c)
 
 # The Fortran based poisson application
 add_executable(poisson-f poisson.f90)

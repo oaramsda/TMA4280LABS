@@ -1,0 +1,17 @@
+#!/bin/bash
+
+#PBS -N p1n16384t32
+#PBS -A imf_lille-tma4280
+#PBS -W group_list=imf_lille-tma4280
+#PBS -l walltime=00:10:00
+#PBS -l select=1:ncpus=20:mpiprocs=1:ompthreads=32
+#PBS -q training
+
+cd $PBS_O_WORKDIR
+
+echo $PBS_O_WORKDIR
+
+module load gcc/6.3.0
+module load openmpi/2.0.1
+
+mpirun ./poisson 16384 32

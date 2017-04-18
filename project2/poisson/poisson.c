@@ -206,6 +206,8 @@ int main(int argc, char **argv)
     printf("Time elapsed: %lf\n", e_time);
     printf("Max absolute error: %.8f\n", err_max);
 
+    print_matrix(b,m,m);
+
     return 0;
 }
 
@@ -216,7 +218,8 @@ int main(int argc, char **argv)
 
 real rhs(real x, real y) {
     //return 2 * (y - y*y + x - x*x);
-    return 5*PI*PI*sin(PI*x)*sin(2*PI*y);
+    //return 5*PI*PI*sin(PI*x)*sin(2*PI*y);
+    return exp(x)*sin(2*PI*x)*sin(2*PI*y);
     //return 1;
 }
 
